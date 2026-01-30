@@ -26,7 +26,7 @@ def print_task_item(p, content):
     wrapped_lines = textwrap.wrap(content, width=available_width)
 
     if wrapped_lines:
-        p.text(f"[ ] {wrapped_lines}\n")
+        p.text(f"[ ] {wrapped_lines[0]}\n")
 
         for line in wrapped_lines[1:]:
             p.text(f"    {line}\n")
@@ -38,6 +38,10 @@ def print_task_item(p, content):
 
 def main():
     try:
+        if not todoist_api:
+            print("TODOIST_API_KEY not set in environment variables.")
+            return
+
         api = TodoistAPI(todoist_api)
         p = Usb(VENDOR_ID, PRODUCT_ID, 0, profile='TM-T88III')
 
@@ -65,11 +69,13 @@ def main():
             print_task_item(p, task.content)
 
         p.text("\n")
-        p.text("--------------------------------")
-        p.text(" I commit to finishing these.\n")
-        p.text("\n\n")
+        p.text("--------------------------------\n")
+        p.set(align='center', bold=True)
+        p.text("I commit to these tasks.\n")
+        p.set(align='left', bold=False)
+        p.text("\n\n\n")
         p.text(" X ___________________________\n")
-        p.text("            (Signature)\n")
+        p.text("          (Signature)\n")
         p.text("\n\n")
 
         p.cut()
@@ -77,6 +83,7 @@ def main():
     
     except Exception as e:
         print(f"Error: {e}")
+        print("Tip: Check if the printer is connected and permissions are set.")
 
 
 if __name__ == "__main__":
