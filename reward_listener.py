@@ -4,7 +4,9 @@ from escpos.printer import Usb
 app = FastAPI()
 
 # Run `lsusb` in terminal to get the vendor id and product id
-printer = Usb()
+VENDOR_ID = 0x483
+PRODUCT_ID = 0x070B
+printer = Usb(VENDOR_ID, PRODUCT_ID, 0, profile="TM-T88III")
 
 
 @app.post("/webhook")
