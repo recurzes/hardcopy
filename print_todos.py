@@ -45,12 +45,11 @@ def main():
         api = TodoistAPI(todoist_api)
         p = Usb(VENDOR_ID, PRODUCT_ID, 0, profile='TM-T88III')
 
-        all_tasks = api.get_tasks()
-        today_str = datetime.now().strftime("%Y-%m-%d")
+        all_tasks = api.get_tasks(limit=10)
         task_to_print = []
 
-        for task in all_tasks:
-            if task.due and task.due.date == today_str:
+        for page in all_tasks:
+            for task in page:
                 task_to_print.append(task)
 
         if not task_to_print:
