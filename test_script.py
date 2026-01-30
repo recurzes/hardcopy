@@ -1,7 +1,7 @@
 from escpos.printer import Usb
 
-VENDOR_ID = ""
-PRODUCT_ID = ""
+VENDOR_ID = 0x483
+PRODUCT_ID = 0x070B
 
 try:
     p = Usb(VENDOR_ID, PRODUCT_ID, 0, profile="TM-T88III")
