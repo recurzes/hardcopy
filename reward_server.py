@@ -1,7 +1,7 @@
 import random
 from fastapi import FastAPI, Request, HTTPException
 from escpos.printer import Usb
-from starlette.types import ExceptionHandler
+from six import b
 
 app = FastAPI()
 
@@ -24,6 +24,16 @@ QUOTES = [
     "Deploying satisfaction.",
     "Ticket closed.",
 ]
+
+
+def beep(p):
+    try:
+        p.cashdraw(2)
+    except:
+        print("wala man")
+        pass
+
+    p._raw(b"\x1b\x42\x03\x01")
 
 
 def get_printer():
@@ -56,6 +66,8 @@ def print_reward(task_name):
     main_reward = random.choice(REWARDS)
     flavor_text = random.choice(QUOTES)
 
+    beep(p)
+
     p.set(align="center", bold=True)
 
     p.text("\n")
@@ -78,3 +90,8 @@ def print_reward(task_name):
     p.cut()
 
     p.close()
+
+
+if __name__ == "__main__":
+    p = get_printer()
+    beep(p)
