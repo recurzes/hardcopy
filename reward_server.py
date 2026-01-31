@@ -1,7 +1,6 @@
 import random
 from fastapi import FastAPI, Request, HTTPException
 from escpos.printer import Usb
-from six import b
 
 app = FastAPI()
 
