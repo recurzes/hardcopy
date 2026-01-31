@@ -1,20 +1,7 @@
 import textwrap
 from datetime import datetime
 from todoist_api_python.api import TodoistAPI
-from escpos.printer import Usb
-from dotenv import load_dotenv
-import os
-from datetime import date
-from pathlib import Path
-
-load_dotenv()
-# Config
-todoist_api = os.getenv("TODOIST_API_KEY")
-
-VENDOR_ID = 0x483
-PRODUCT_ID = 0x070B
-
-MAX_WIDTH = 32
+from util import *
 
 def print_centered(p, text):
     p.set(align='center', bold=True)
@@ -40,12 +27,15 @@ def print_task_item(p, content):
 
 def main():
     try:
-        if not todoist_api:
+        if not TODOIST_API_KEY:
             print("TODOIST_API_KEY not set in environment variables.")
             return
 
-        api = TodoistAPI(todoist_api)
-        p = Usb(VENDOR_ID, PRODUCT_ID, 0, profile='TM-T88III')
+        api = TodoistAPI(TODOIST_API_KEY)
+        p = get_printer()
+        
+        if not p:
+            return
 
         all_tasks = api.get_tasks(limit=10)
         task_to_print = []

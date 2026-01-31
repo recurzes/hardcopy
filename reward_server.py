@@ -1,11 +1,8 @@
 import random
 from fastapi import FastAPI, Request, HTTPException
-from escpos.printer import Usb
+from util import *
 
 app = FastAPI()
-
-VENDOR_ID = 0x483
-PRODUCT_ID = 0x070B
 
 REWARDS = [
     "XP GAINED: +150",
@@ -35,14 +32,6 @@ def beep(p):
     p._raw(b"\x1b\x42\x03\x01")
 
 
-def get_printer():
-    try:
-        return Usb(VENDOR_ID, PRODUCT_ID, 0, profile="TM-T88III")
-    except Exception as e:
-        print(f"Printer Error: {e}")
-        return None
-
-
 @app.post("/webhook")
 async def handle_webhook(request: Request):
     try:
@@ -59,6 +48,7 @@ async def handle_webhook(request: Request):
 
 def print_reward(task_name):
     p = get_printer()
+    
     if not p:
         return
 
