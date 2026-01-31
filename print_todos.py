@@ -4,6 +4,8 @@ from todoist_api_python.api import TodoistAPI
 from escpos.printer import Usb
 from dotenv import load_dotenv
 import os
+from datetime import date
+from pathlib import Path
 
 load_dotenv()
 # Config
@@ -37,6 +39,15 @@ def print_task_item(p, content):
     p.text("\n")
 
 def main():
+    marker_dir = Path.home() / ".cache" / "todoist"
+    marker_dir.mkdir(parents=True, exist_ok=True)
+
+    today_marker = marker_dir / f"printed_{date.today().isoformat()}"
+    if today_marker.exists():
+        print("Already printed today. Exiting.")
+        return
+    today_marker.touch()
+    
     try:
         if not todoist_api:
             print("TODOIST_API_KEY not set in environment variables.")
