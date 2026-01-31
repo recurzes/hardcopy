@@ -42,9 +42,9 @@ Edit the `.env` variables in the scripts with your credentials
 - **Ngrok Static Domain:** You need to get a static domain from [ngrok](https://ngrok.com). Create an account and get the static domain
 
 ## Usage
-**Printing Current Tasks:** `python print_todos.py`
-**Running the Rewards Server:** `python -m uvicorn rewards_server:app --host 127.0.0.1 --port 8000`
-**Running ngrok tunnel (this is for receiving updates from todoist using a webhook):** `ngrok http --domain [STATIC DOMAIN] 8000`
+- **Printing Current Tasks:** `python print_todos.py`
+- **Running the Rewards Server:** `python -m uvicorn rewards_server:app --host 127.0.0.1 --port 8000`
+- **Running ngrok tunnel (this is for receiving updates from todoist using a webhook):** `ngrok http --domain [STATIC DOMAIN] 8000`
 
 
 ## TODO
