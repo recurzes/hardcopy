@@ -1,6 +1,8 @@
 import random
 from fastapi import FastAPI, Request, HTTPException
 from util import *
+import print_todos
+import textwrap
 
 app = FastAPI()
 
@@ -41,7 +43,10 @@ async def handle_webhook(request: Request):
 
     if data.get("event_name") == "item:completed":
         task_content = data["event_data"]["content"]
-        print_reward(task_content)
+        if "task print" in task_content.lower():
+            print_todos.main()
+        else:
+            print_reward(task_content)
 
     return {"status": "ok"}
 
@@ -52,8 +57,11 @@ def print_reward(task_name):
     if not p:
         return
 
+    available_width = MAX_WIDTH - 4
     main_reward = random.choice(REWARDS)
     flavor_text = random.choice(QUOTES)
+    
+    wrapped_task_name = textwrap.wrap(task_name, width=available_width)
 
     beep(p)
 
@@ -63,8 +71,10 @@ def print_reward(task_name):
     p.text("################################")
 
     p.set(bold=False, align="center", font="b")
-    p.text(f"COMPLETED:\n{task_name[:30]}\n")
-
+    p.text("COMPLETED:\n")
+    for line in wrapped_task_name:
+        p.text(f"{line.title()}\n")
+    
     p.set(bold=True, align="center", font="a")
     p.text("--------------------------------")
     p.text(f"\n{main_reward}\n\n")
