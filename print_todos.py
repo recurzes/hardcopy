@@ -37,12 +37,14 @@ def main():
         if not p:
             return
 
-        all_tasks = api.get_tasks(limit=10)
+        all_tasks = api.get_tasks()
         task_to_print = []
+        today = datetime.now().strftime("%Y-%m-%d")
 
         for page in all_tasks:
             for task in page:
-                task_to_print.append(task)
+                if task.due and task.due.date == today:
+                    task_to_print.append(task)
 
         if not task_to_print:
             print("No tasks for today! Enjoy your freedom")
