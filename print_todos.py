@@ -39,11 +39,14 @@ def main():
 
         all_tasks = api.get_tasks()
         task_to_print = []
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now().date()
 
         for page in all_tasks:
             for task in page:
-                if task.due and task.due.date == today:
+                due = task.due
+                if not due:
+                    continue
+                if due.date == today:
                     task_to_print.append(task)
 
         if not task_to_print:
@@ -72,12 +75,36 @@ def main():
         p.text("\n\n")
 
         p.cut()
+        p.close()
         print(f"Successfully printed {len(task_to_print)} tasks")
     
     except Exception as e:
         print(f"Error: {e}")
         print("Tip: Check if the printer is connected and permissions are set.")
 
+
+def print_task_console():
+    if not TODOIST_API_KEY:
+            print("TODOIST_API_KEY not set in environment variables.")
+            return
+        
+    api = TodoistAPI(TODOIST_API_KEY)
+    
+    tasks = api.get_tasks()
+    
+    task_to_print = []
+    today = datetime.now().date()
+
+    for page in tasks:
+        for task in page:
+            due = task.due
+            if not due:
+                continue
+            if due.date == today:
+                print(f"Task: {task.content}, Due: {due.date}")
+    
+    print(f"Today: {today}")
+    
 
 if __name__ == "__main__":
     main()
