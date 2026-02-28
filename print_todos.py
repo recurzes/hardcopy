@@ -3,12 +3,6 @@ from datetime import datetime
 from todoist_api_python.api import TodoistAPI
 from util import *
 
-def print_centered(p, text):
-    p.set(align='center', bold=True)
-    p.text(text + "\n")
-    p.set(align='left', bold=False)
-
-
 def print_task_item(p, content):
     available_width = MAX_WIDTH - 4 
 
