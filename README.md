@@ -28,6 +28,8 @@ hardcopy/
 │       ├── boss.py        # weekly raid report
 │       └── barcodes.py    # barcode utility
 ├── reward_server.py       # uvicorn entrypoint + printer test
+├── systemd/               # user systemd unit templates
+├── scripts/               # install helpers
 ├── scratch/               # experiments
 └── tasks/                 # branchable task specs
 ```
@@ -69,8 +71,51 @@ Root scripts delegate to `src/commands/`:
 - **Test printer beep:** `python reward_server.py`
 - **Running ngrok tunnel (for Todoist webhooks):** `ngrok http --domain [STATIC DOMAIN] 8000`
 
-## TODO
-- Create a shell script to automate making a systemd service (linux only) so that:
-    - It will print the current tasks at exactly 10am
-    - Automate running the webhook server as well as the ngrok without manually doing anything
-    - Registering a service so that every 8pm Sunday it will print a summary of what you did for the entire week (any many more actually)
+## Scheduled Automation
+
+Install user systemd units (no root required for the services themselves):
+
+```bash
+chmod +x scripts/install-services.sh
+./scripts/install-services.sh
+```
+
+Optional ngrok tunnel service (requires `NGROK_DOMAIN` in `.env`):
+
+```bash
+./scripts/install-services.sh --with-ngrok
+```
+
+This enables:
+- **10:00 daily** — print today's Todoist tasks
+- **Sunday 20:00** — weekly boss report
+- **Always on** — webhook reward server on `127.0.0.1:8000`
+
+Check status:
+
+```bash
+systemctl --user list-timers 'hardcopy-*'
+systemctl --user status hardcopy-rewards.service
+journalctl --user -u hardcopy-todos.service
+```
+
+Manual trigger:
+
+```bash
+systemctl --user start hardcopy-todos.service
+systemctl --user start hardcopy-boss.service
+```
+
+Timers run while logged out after enabling linger:
+
+```bash
+loginctl enable-linger "$USER"
+```
+
+Printer USB access for systemd user services:
+
+```bash
+sudo usermod -aG lp "$USER"
+# re-login required
+```
+
