@@ -38,7 +38,7 @@ def main():
             return
 
         p.text("\n")
-        print_centered(p, f"{datetime.now().strftime('%B %-d, %Y')}")
+        print_centered(p, datetime.now().strftime("%B %-d, %Y"))
         print_centered(p, "================================")
         print_centered(p, "    HABITS TO WORK ON    ")
         print_centered(p, "================================")

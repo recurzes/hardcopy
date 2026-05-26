@@ -90,8 +90,8 @@ def get_time_bonus():
 def beep(p):
     try:
         p.cashdraw(2)
-    except Exception:
-        print("wala man")
+    except Exception as e:
+        print(f"Cash drawer not supported: {e}")
 
     p._raw(b"\x1b\x42\x03\x01")
 
