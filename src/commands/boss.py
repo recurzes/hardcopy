@@ -45,16 +45,14 @@ def main():
         start_date = end_date - timedelta(days=7)
 
         completed_tasks = []
-        pages = api.get_completed_tasks_by_completion_date(
+        for page in api.get_completed_tasks_by_completion_date(
             since=start_date, until=end_date
-        )
-
-        for page in pages:
+        ):
             completed_tasks.extend(page)
 
         total_tasks = len(completed_tasks)
         total_xp = total_tasks * XP_PER_TASK
-        boss_defeated = total_tasks >= BOSS_HEALTH
+        boss_defeated = total_tasks >= WEEKLY_GOAL_TASKS
 
         p.set(align="center", bold=True, double_height=True)
         p.text("WEEKLY RAID REPORT\n")
@@ -88,6 +86,7 @@ def main():
 
         p.text("\n\n\n")
         p.cut()
+        p.close()
 
         print(f"Weekly Raid Report Printed: {total_tasks} tasks completed.")
 
