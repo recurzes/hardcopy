@@ -45,7 +45,7 @@ def main():
                 due = task.due
                 if not due:
                     continue
-                if due.date == today:
+                if due.date == today.isoformat():
                     task_to_print.append(task)
 
         if not task_to_print:
