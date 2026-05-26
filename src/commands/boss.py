@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta
-from todoist_api_python.api import TodoistAPI
-from util import *
 
+from escpos.printer import Usb
+from todoist_api_python.api import TodoistAPI
+
+from src.config import TODOIST_API_KEY
+from src.printer import get_printer
 
 XP_PER_TASK = 100
 WEEKLY_GOAL_TASKS = 20
@@ -11,7 +14,6 @@ BOSS_HEALTH = WEEKLY_GOAL_TASKS * XP_PER_TASK
 def print_boss_art(p: Usb, defeated=True):
     p.set(align="center", bold=True)
     if defeated:
-        # Simple Crown / Trophy Art
         p.text("\n")
         p.text("      .+.      \n")
         p.text("    (  |  )    \n")
@@ -19,7 +21,6 @@ def print_boss_art(p: Usb, defeated=True):
         p.text("     `---'     \n")
         p.text("  BOSS DEFEATED \n")
     else:
-        # Skull / Failure Art
         p.text("\n")
         p.text("     (o.o)     \n")
         p.text("      |=|      \n")
@@ -33,7 +34,7 @@ def main():
         if not TODOIST_API_KEY:
             print("TODOIST_API_KEY not set in environment variables.")
             return
-        
+
         api = TodoistAPI(TODOIST_API_KEY)
         p = get_printer()
 
@@ -54,8 +55,6 @@ def main():
         total_tasks = len(completed_tasks)
         total_xp = total_tasks * XP_PER_TASK
         boss_defeated = total_tasks >= BOSS_HEALTH
-
-        p = Usb(VENDOR_ID, PRODUCT_ID, 0)
 
         p.set(align="center", bold=True, double_height=True)
         p.text("WEEKLY RAID REPORT\n")

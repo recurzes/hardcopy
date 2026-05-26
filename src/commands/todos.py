@@ -1,10 +1,14 @@
 import textwrap
 from datetime import datetime
+
 from todoist_api_python.api import TodoistAPI
-from util import *
+
+from src.config import MAX_WIDTH, TODOIST_API_KEY
+from src.printer import get_printer, print_centered
+
 
 def print_task_item(p, content):
-    available_width = MAX_WIDTH - 4 
+    available_width = MAX_WIDTH - 4
 
     wrapped_lines = textwrap.wrap(content, width=available_width)
 
@@ -19,6 +23,7 @@ def print_task_item(p, content):
 
     p.text("\n")
 
+
 def main():
     try:
         if not TODOIST_API_KEY:
@@ -27,7 +32,7 @@ def main():
 
         api = TodoistAPI(TODOIST_API_KEY)
         p = get_printer()
-        
+
         if not p:
             return
 
@@ -46,23 +51,23 @@ def main():
         if not task_to_print:
             print("No tasks for today! Enjoy your freedom")
             return
-        
-        p.text('\n')
+
+        p.text("\n")
         print_centered(p, "================================")
         print_centered(p, "    DAILY QUEST LOG    ")
         print_centered(p, datetime.now().strftime("%Y-%m-%d"))
         print_centered(p, "================================")
 
-        p.set(align='left', font='a')
+        p.set(align="left", font="a")
 
         for task in task_to_print:
             print_task_item(p, task.content)
 
         p.text("\n")
         p.text("--------------------------------\n")
-        p.set(align='center', bold=True)
+        p.set(align="center", bold=True)
         p.text("I commit to these tasks.\n")
-        p.set(align='left', bold=False)
+        p.set(align="left", bold=False)
         p.text("\n\n\n")
         p.text(" X ___________________________\n")
         p.text("          (Signature)\n")
@@ -71,34 +76,11 @@ def main():
         p.cut()
         p.close()
         print(f"Successfully printed {len(task_to_print)} tasks")
-    
+
     except Exception as e:
         print(f"Error: {e}")
         print("Tip: Check if the printer is connected and permissions are set.")
 
-
-def print_task_console():
-    if not TODOIST_API_KEY:
-            print("TODOIST_API_KEY not set in environment variables.")
-            return
-        
-    api = TodoistAPI(TODOIST_API_KEY)
-    
-    tasks = api.get_tasks()
-    
-    task_to_print = []
-    today = datetime.now().date()
-
-    for page in tasks:
-        for task in page:
-            due = task.due
-            if not due:
-                continue
-            if due.date == today:
-                print(f"Task: {task.content}, Due: {due.date}")
-    
-    print(f"Today: {today}")
-    
 
 if __name__ == "__main__":
     main()
