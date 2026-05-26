@@ -27,11 +27,7 @@ hardcopy/
 │       ├── reward.py      # reward slip printing
 │       ├── boss.py        # weekly raid report
 │       └── barcodes.py    # barcode utility
-├── print_todos.py         # root entrypoints (backward compatible)
-├── print_habits.py
-├── reward_server.py
-├── sunday_boss.py
-├── print_barcodes.py
+├── reward_server.py       # uvicorn entrypoint + printer test
 ├── scratch/               # experiments
 └── tasks/                 # branchable task specs
 ```
@@ -65,11 +61,12 @@ Copy `.env.example` to `.env` and fill in your credentials:
 
 Root scripts delegate to `src/commands/`:
 
-- **Printing Current Tasks:** `python print_todos.py` or `python -m src.commands.todos`
-- **Printing Habits:** `python print_habits.py`
-- **Weekly Boss Report:** `python sunday_boss.py`
+- **Printing Current Tasks:** `python -m src.commands.todos`
+- **Printing Habits:** `python -m src.commands.habits`
+- **Weekly Boss Report:** `python -m src.commands.boss`
 - **Running the Rewards Server:** `python -m uvicorn src.server:app --host 127.0.0.1 --port 8000`
   - Backward compatible: `python -m uvicorn reward_server:app --host 127.0.0.1 --port 8000`
+- **Test printer beep:** `python reward_server.py`
 - **Running ngrok tunnel (for Todoist webhooks):** `ngrok http --domain [STATIC DOMAIN] 8000`
 
 ## TODO
