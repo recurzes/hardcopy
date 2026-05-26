@@ -1,0 +1,11 @@
+[Unit]
+Description=Hardcopy - Daily task print at 10:00
+Requires=hardcopy-todos.service
+
+[Timer]
+OnCalendar=*-*-* 10:00:00
+Persistent=true
+Unit=hardcopy-todos.service
+
+[Install]
+WantedBy=timers.target
