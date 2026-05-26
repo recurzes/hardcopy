@@ -7,12 +7,34 @@ Hardcopy turns your abstract Todoist list into a physical reality. Inspired by t
 
 ## System Architecture
 
-The system operates on threee distinct modules:
+The system operates on three distinct modules:
 
 1. **The Contract (Morning):** Fetches "Today's" tasks and prints a physical checklist to sign.
 2. **The Daemon (All Day):** A local FastAPI server listening to Todoist Webhooks. When a task is checked off digitally, the printer immediately prints a randomized "XP Reward" slip.
 3. **The Boss Fight (Weekly):** A Sunday night summary that calculates total XP, determines if you "defeated" the week, and prints a rank (S+ to F).
 
+## Project Structure
+
+```
+hardcopy/
+├── src/
+│   ├── config.py          # env vars and constants
+│   ├── printer.py         # USB printer helpers
+│   ├── server.py          # FastAPI webhook app
+│   └── commands/
+│       ├── todos.py       # daily task contract
+│       ├── habits.py      # habit checklist
+│       ├── reward.py      # reward slip printing
+│       ├── boss.py        # weekly raid report
+│       └── barcodes.py    # barcode utility
+├── print_todos.py         # root entrypoints (backward compatible)
+├── print_habits.py
+├── reward_server.py
+├── sunday_boss.py
+├── print_barcodes.py
+├── scratch/               # experiments
+└── tasks/                 # branchable task specs
+```
 
 ## Hardware Requirements
 
@@ -25,31 +47,33 @@ The system operates on threee distinct modules:
 ### 1. System Dependencies (Arch Linux)
 Doesn't really have one, it just works and I don't know why
 
-
 ### 2. Python Environment
 - mkdir hardcopy && cd hardcopy
 - python -m venv venv
 - source venv/bin/activate
 
-Install dependencies
-- pip install todoist-api-python python-escpos[usb] fastapi[all] python-dotenv todoist-api-python
-
+Install dependencies:
+- pip install -r requirements.txt
 
 ### 3. Configuration
-Edit the `.env` variables in the scripts with your credentials
+Copy `.env.example` to `.env` and fill in your credentials:
 - **Todoist API Token:** Settings > Integrations > Developer
-- **Printer IDs:** Run `lsusb` to find your Vendor/Product hex codes
+- **Printer IDs:** Run `lsusb` to find your Vendor/Product hex codes (defaults in `src/config.py`)
 - **Ngrok Static Domain:** You need to get a static domain from [ngrok](https://ngrok.com). Create an account and get the static domain
 
 ## Usage
-- **Printing Current Tasks:** `python print_todos.py`
-- **Running the Rewards Server:** `python -m uvicorn rewards_server:app --host 127.0.0.1 --port 8000`
-- **Running ngrok tunnel (this is for receiving updates from todoist using a webhook):** `ngrok http --domain [STATIC DOMAIN] 8000`
 
+Root scripts delegate to `src/commands/`:
+
+- **Printing Current Tasks:** `python print_todos.py` or `python -m src.commands.todos`
+- **Printing Habits:** `python print_habits.py`
+- **Weekly Boss Report:** `python sunday_boss.py`
+- **Running the Rewards Server:** `python -m uvicorn src.server:app --host 127.0.0.1 --port 8000`
+  - Backward compatible: `python -m uvicorn reward_server:app --host 127.0.0.1 --port 8000`
+- **Running ngrok tunnel (for Todoist webhooks):** `ngrok http --domain [STATIC DOMAIN] 8000`
 
 ## TODO
 - Create a shell script to automate making a systemd service (linux only) so that:
     - It will print the current tasks at exactly 10am
     - Automate running the webhook server as well as the ngrok without manually doing anything
     - Registering a service so that every 8pm Sunday it will print a summary of what you did for the entire week (any many more actually)
-
