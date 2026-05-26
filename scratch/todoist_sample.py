@@ -2,7 +2,6 @@
 from todoist_api_python.api import TodoistAPI
 from dotenv import load_dotenv
 import os
-from datetime import datetime, timedelta
 
 load_dotenv()
 
