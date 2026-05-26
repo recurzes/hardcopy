@@ -1,0 +1,11 @@
+[Unit]
+Description=Hardcopy - Weekly report Sunday 20:00
+Requires=hardcopy-boss.service
+
+[Timer]
+OnCalendar=Sun *-*-* 20:00:00
+Persistent=true
+Unit=hardcopy-boss.service
+
+[Install]
+WantedBy=timers.target

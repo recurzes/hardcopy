@@ -1,0 +1,14 @@
+[Unit]
+Description=Hardcopy - Todoist webhook reward server
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@HARDCOPY_ROOT@
+EnvironmentFile=-@HARDCOPY_ROOT@/.env
+ExecStart=@HARDCOPY_PYTHON@ -m uvicorn src.server:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

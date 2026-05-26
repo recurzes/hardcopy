@@ -1,0 +1,9 @@
+[Unit]
+Description=Hardcopy - Weekly boss raid report
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@HARDCOPY_ROOT@
+EnvironmentFile=-@HARDCOPY_ROOT@/.env
+ExecStart=@HARDCOPY_PYTHON@ -m src.commands.boss

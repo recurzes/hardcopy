@@ -1,0 +1,15 @@
+[Unit]
+Description=Hardcopy - ngrok tunnel for webhooks
+After=network-online.target hardcopy-rewards.service
+Requires=hardcopy-rewards.service
+
+[Service]
+Type=simple
+WorkingDirectory=@HARDCOPY_ROOT@
+EnvironmentFile=-@HARDCOPY_ROOT@/.env
+ExecStart=@NGROK_BIN@ http --domain=${NGROK_DOMAIN} 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
