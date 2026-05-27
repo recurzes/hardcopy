@@ -71,6 +71,8 @@ UNITS=(
     hardcopy-rewards.service
     hardcopy-boss.service
     hardcopy-boss.timer
+    hardcopy-planner.service
+    hardcopy-planner.timer
 )
 
 if [[ $WITH_NGROK -eq 1 ]]; then
@@ -86,6 +88,7 @@ systemctl --user daemon-reload
 
 systemctl --user enable --now hardcopy-todos.timer
 systemctl --user enable --now hardcopy-boss.timer
+systemctl --user enable --now hardcopy-planner.timer
 systemctl --user enable --now hardcopy-rewards.service
 
 if [[ $WITH_NGROK -eq 1 ]]; then
@@ -103,11 +106,13 @@ Status:
 Logs:
   journalctl --user -u hardcopy-todos.service
   journalctl --user -u hardcopy-boss.service
+  journalctl --user -u hardcopy-planner.service
   journalctl --user -u hardcopy-rewards.service
 
 Manual runs:
   systemctl --user start hardcopy-todos.service
   systemctl --user start hardcopy-boss.service
+  systemctl --user start hardcopy-planner.service
 
 Timers also run when logged out after enabling linger:
   loginctl enable-linger "$USER"
