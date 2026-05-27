@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from todoist_api_python.api import TodoistAPI
 
 from src.config import MAX_WIDTH, TODOIST_API_KEY
-from src.db import get_capacity_insights, log_plan_generated
+from src.db import build_llm_context, get_capacity_insights, log_plan_generated
 from src.llm import LLMError, llm_complete
 from src.printer import get_printer, print_centered
 
@@ -166,6 +166,31 @@ def build_system_prompt(context: dict) -> str:
     if peak_hour is not None:
         capacity_lines.append(
             f"Their most productive hour is around {peak_hour:02d}:00."
+        )
+
+    adherence = build_llm_context().get("plan_adherence", {})
+    yesterday_plan = adherence.get("yesterday_plan")
+    if yesterday_plan:
+        planned = yesterday_plan.get("task_count", 0)
+        completed = adherence.get("today_completed", 0)
+        capacity_lines.append(
+            f"Yesterday they planned {planned} tasks and completed {completed} today so far."
+        )
+    avg_planned = adherence.get("tomorrow_weekday_avg_planned")
+    avg_completed = adherence.get("tomorrow_weekday_avg_completed")
+    tomorrow_weekday = adherence.get("tomorrow_weekday")
+    if avg_planned is not None and tomorrow_weekday:
+        completed_text = (
+            f"{avg_completed:.1f}" if avg_completed is not None else "unknown"
+        )
+        capacity_lines.append(
+            f"On {tomorrow_weekday}s they historically plan {avg_planned:.1f} "
+            f"and complete {completed_text} the next day — size tomorrow accordingly."
+        )
+    for item in adherence.get("history", [])[:3]:
+        capacity_lines.append(
+            f"Plan history: {item['plan_date']} planned {item['planned']}, "
+            f"next day completed {item['completed_next_day']}."
         )
 
     capacity_text = "\n".join(capacity_lines)
@@ -564,6 +589,8 @@ def main(argv: list[str] | None = None) -> int:
         log_plan_generated(
             len(plan["tasks"]),
             plan.get("total_estimated_minutes"),
+            task_ids=[task["task_id"] for task in plan["tasks"]],
+            task_contents=[task["content"] for task in plan["tasks"]],
         )
     except Exception as e:
         print(f"Database error: {e}")
