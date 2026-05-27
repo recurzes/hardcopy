@@ -29,6 +29,7 @@ hardcopy/
 │       ├── add.py         # quick task capture
 │       ├── plan.py        # evening auto-planner
 │       ├── split.py       # split big tasks into subtasks
+│       ├── focus.py       # pomodoro focus sessions
 │       ├── habits.py      # habit checklist
 │       ├── reward.py      # reward slip printing
 │       ├── boss.py        # weekly raid report
@@ -152,6 +153,26 @@ Flow: scans for large/vague tasks → LLM proposes 3–7 subtasks → confirm �
 When the webhook server is running, newly added tasks that look too big trigger a "Quest Too Big To Solo" suggestion receipt (subscribe to `item:added` in Todoist webhooks).
 
 Requires `LLM_PROVIDER` and `LLM_API_KEY` in `.env`.
+
+### Focus Session
+
+Pomodoro-style focus with printed start/end/checkpoint receipts:
+
+```bash
+# 25-minute session (default)
+python -m src.commands.focus "work on presentation slides"
+
+# Custom duration (45 min with mid-session check-in)
+python -m src.commands.focus "research paper outline" 45
+
+# Complete matching Todoist task when session finishes
+python -m src.commands.focus "draft meeting agenda" 25 --complete
+
+# Disable checkpoint receipt for long sessions
+python -m src.commands.focus "deep work block" 60 --no-checkin
+```
+
+Prints session start receipt, terminal countdown, optional halfway checkpoint (>30 min), completion reward with XP/streak, or partial credit on early exit (Ctrl+C after 1+ min). Streak data stored in `~/.local/share/hardcopy/focus_streaks.json`.
 
 ## Scheduled Automation
 
