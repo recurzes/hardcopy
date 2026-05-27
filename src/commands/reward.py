@@ -3,6 +3,7 @@ import textwrap
 from datetime import datetime
 
 from src.config import MAX_WIDTH
+from src.db import log_task_complete, print_level_up_receipt, print_new_record_lines
 from src.printer import get_printer
 
 REWARDS = {
@@ -151,6 +152,28 @@ def print_reward(task_name):
     p.set(bold=False, font="b", align="center")
     p.text(f"{time_bonus}\n")
 
+    try:
+        xp_result = log_task_complete(task_name, tier)
+    except Exception as e:
+        print(f"Database error: {e}")
+        xp_result = {}
+
+    if xp_result:
+        p.set(bold=True, align="center", font="a")
+        p.text(f"+{xp_result.get('amount', 0)} XP\n")
+        p.set(bold=False, align="center", font="b")
+        p.text(
+            f"LVL {xp_result.get('level', 1)} | "
+            f"{xp_result.get('total_xp', 0)} XP total\n"
+        )
+        daily_streak = xp_result.get("daily_streak", 0)
+        if daily_streak:
+            streak_line = f"DAY {daily_streak} STREAK"
+            if xp_result.get("daily_streak_increased"):
+                streak_line += " (new!)"
+            p.text(f"{streak_line}\n")
+        print_new_record_lines(p, xp_result.get("new_records", []))
+
     p.set(bold=False, font="b", align="center")
     p.text(f"\n> {flavor_text} <\n")
 
@@ -159,3 +182,10 @@ def print_reward(task_name):
 
     p.cut()
     p.close()
+
+    if xp_result.get("leveled_up"):
+        print_level_up_receipt(
+            xp_result["old_level"],
+            xp_result["level"],
+            xp_result["total_xp"],
+        )

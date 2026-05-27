@@ -11,7 +11,9 @@ from datetime import date, datetime
 from todoist_api_python.api import TodoistAPI
 
 from src.config import MAX_WIDTH, TODOIST_API_KEY
+from src.db import build_llm_context
 from src.llm import LLMError, llm_complete
+from src.llm_context import format_focus_context_block
 from src.printer import get_printer, print_centered
 
 BROAD_VERBS = (
@@ -120,27 +122,41 @@ def format_duration(minutes: int) -> str:
 
 
 def build_split_system_prompt() -> str:
-    return """You are a task decomposition assistant for someone with ADHD.
+    context = build_llm_context()
+    focus_block = format_focus_context_block(context["focus"])
+    target_minutes = context["focus"].get("average_session_minutes") or 20
+    max_subtasks = 7
+    remaining = context["focus"].get("remaining_daily_capacity")
+    if remaining is not None and remaining <= 1:
+        max_subtasks = 4
 
-Given a large task, break it into 3-7 concrete subtasks. Each subtask must be:
-- Completable in one sitting (15-30 minutes max)
+    return f"""You are a task decomposition assistant for someone with ADHD.
+
+{focus_block}
+
+Given a large task, break it into 3-{max_subtasks} concrete subtasks. Each subtask must be:
+- Completable in one sitting (~{target_minutes} minutes when possible)
 - Specific and actionable (not vague)
 - Ordered logically (dependencies first)
 
+If remaining daily capacity is low, prefer fewer subtasks starting today.
 Spread subtask due dates across the days before the parent deadline so work is not back-loaded.
 If there is no parent due date, spread subtasks across the next few days starting from today.
 
 Respond with ONLY valid JSON (no markdown fences):
-{
+{{
   "subtasks": [
-    {"content": "Gather 3 key sources and skim abstracts", "due_date": "YYYY-MM-DD", "estimated_minutes": 20}
+    {{"content": "Gather 3 key sources and skim abstracts", "due_date": "YYYY-MM-DD", "estimated_minutes": 20}}
   ]
-}"""
+}}"""
 
 
 def build_split_user_prompt(target: SplitTarget, today: date) -> str:
+    context = build_llm_context()
+    focus_block = format_focus_context_block(context["focus"])
     due_str = target.due_date.isoformat() if target.due_date else "none"
     return (
+        f"{focus_block}\n\n"
         f'Today: {today.isoformat()} ({today.strftime("%A")})\n'
         f'Task: "{target.content}"\n'
         f"Priority: P{target.priority}\n"
