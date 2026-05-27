@@ -501,10 +501,21 @@ def log_quick_capture(task_count: int) -> None:
     log_event("quick_capture", {"task_count": task_count})
 
 
-def log_plan_generated(task_count: int, total_minutes: int | None) -> None:
+def log_plan_generated(
+    task_count: int,
+    total_minutes: int | None,
+    *,
+    task_ids: list[str] | None = None,
+    task_contents: list[str] | None = None,
+) -> None:
     log_event(
         "plan_generated",
-        {"task_count": task_count, "total_estimated_minutes": total_minutes},
+        {
+            "task_count": task_count,
+            "total_estimated_minutes": total_minutes,
+            "task_ids": task_ids or [],
+            "task_contents": task_contents or [],
+        },
     )
 
 
@@ -664,17 +675,6 @@ def get_weekday_pattern() -> dict[int, float]:
     return {day: count / weeks_of_data for day, count in counts.items()}
 
 
-def get_records() -> dict[str, dict[str, Any]]:
-    conn = get_connection()
-    rows = conn.execute(
-        "SELECT record_type, value, achieved_at FROM records ORDER BY record_type"
-    ).fetchall()
-    return {
-        row["record_type"]: {"value": row["value"], "achieved_at": row["achieved_at"]}
-        for row in rows
-    }
-
-
 def get_capacity_insights(today: date | None = None) -> dict[str, Any]:
     today = today or date.today()
     weekday_pattern = get_weekday_pattern()
@@ -700,6 +700,272 @@ def get_capacity_insights(today: date | None = None) -> dict[str, Any]:
         "weekday_pattern": weekday_pattern,
         "daily_streak": int(stats.get("current_daily_streak", 0)),
         "last_active_date": stats.get("last_active_date"),
+    }
+
+
+def get_records() -> dict[str, dict[str, Any]]:
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT record_type, value, achieved_at FROM records ORDER BY record_type"
+    ).fetchall()
+    return {
+        row["record_type"]: {"value": row["value"], "achieved_at": row["achieved_at"]}
+        for row in rows
+    }
+
+
+def get_yesterday_summary() -> dict[str, int]:
+    conn = get_connection()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+
+    tasks = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM events
+        WHERE event_type = 'task_complete'
+          AND date(created_at) = date(?)
+        """,
+        (yesterday,),
+    ).fetchone()["count"]
+
+    focus_sessions = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM events
+        WHERE event_type = 'focus_complete'
+          AND date(created_at) = date(?)
+        """,
+        (yesterday,),
+    ).fetchone()["count"]
+
+    focus_minutes = conn.execute(
+        """
+        SELECT COALESCE(SUM(json_extract(data, '$.duration_minutes')), 0) AS total
+        FROM events
+        WHERE event_type = 'focus_complete'
+          AND date(created_at) = date(?)
+        """,
+        (yesterday,),
+    ).fetchone()["total"]
+
+    return {
+        "tasks_completed": int(tasks),
+        "focus_sessions": int(focus_sessions),
+        "focus_minutes": int(focus_minutes),
+    }
+
+
+def get_week_tasks_so_far() -> int:
+    conn = get_connection()
+    week_start = (date.today() - timedelta(days=6)).isoformat()
+    today = _today_str()
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM events
+        WHERE event_type = 'task_complete'
+          AND date(created_at) BETWEEN date(?) AND date(?)
+        """,
+        (week_start, today),
+    ).fetchone()
+    return int(row["count"])
+
+
+def get_focus_stats() -> dict[str, Any]:
+    stats = get_stats()
+    records = get_records()
+
+    conn = get_connection()
+    row = conn.execute(
+        """
+        SELECT AVG(json_extract(data, '$.duration_minutes')) AS avg_minutes
+        FROM events
+        WHERE event_type = 'focus_complete'
+        """
+    ).fetchone()
+    avg_minutes = row["avg_minutes"]
+    average_session = round(float(avg_minutes)) if avg_minutes is not None else None
+
+    longest = records.get("longest_focus", {}).get("value")
+    today = get_today_summary()
+    capacity = get_capacity_insights()
+    weekday_avg = capacity.get("weekday_average")
+    tasks_today = today["tasks_completed"]
+
+    remaining_capacity = None
+    if weekday_avg is not None:
+        remaining_capacity = max(0, round(weekday_avg) - tasks_today)
+
+    return {
+        "average_session_minutes": average_session,
+        "longest_session_minutes": int(longest) if longest else None,
+        "total_sessions": int(stats.get("total_focus_sessions", 0)),
+        "total_minutes": int(stats.get("total_focus_minutes", 0)),
+        "tasks_completed_today": tasks_today,
+        "weekday_average": weekday_avg,
+        "remaining_daily_capacity": remaining_capacity,
+    }
+
+
+def get_plan_adherence_insights() -> dict[str, Any]:
+    conn = get_connection()
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+
+    yesterday_plan = conn.execute(
+        """
+        SELECT data, created_at
+        FROM events
+        WHERE event_type = 'plan_generated'
+          AND date(created_at) = date(?)
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (yesterday.isoformat(),),
+    ).fetchone()
+
+    last_plan_payload: dict[str, Any] | None = None
+    if yesterday_plan and yesterday_plan["data"]:
+        last_plan_payload = json.loads(yesterday_plan["data"])
+
+    history_rows = conn.execute(
+        """
+        SELECT date(created_at) AS plan_date, data
+        FROM events
+        WHERE event_type = 'plan_generated'
+        ORDER BY created_at DESC
+        LIMIT 14
+        """
+    ).fetchall()
+
+    history: list[dict[str, Any]] = []
+    for row in history_rows:
+        plan_date_str = str(row["plan_date"])[:10]
+        plan_date = date.fromisoformat(plan_date_str)
+        payload = json.loads(row["data"]) if row["data"] else {}
+        planned = int(payload.get("task_count", 0))
+        next_day = (plan_date + timedelta(days=1)).isoformat()
+        completed = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM events
+            WHERE event_type = 'task_complete'
+              AND date(created_at) = date(?)
+            """,
+            (next_day,),
+        ).fetchone()["count"]
+        history.append(
+            {
+                "plan_date": plan_date_str,
+                "weekday": plan_date.strftime("%A"),
+                "planned": planned,
+                "completed_next_day": int(completed),
+            }
+        )
+
+    tomorrow_weekday = (today + timedelta(days=1)).strftime("%A")
+    same_weekday = [
+        item
+        for item in history
+        if item["weekday"] == tomorrow_weekday and item["plan_date"] != today.isoformat()
+    ]
+    avg_planned = (
+        sum(item["planned"] for item in same_weekday) / len(same_weekday)
+        if same_weekday
+        else None
+    )
+    avg_completed = (
+        sum(item["completed_next_day"] for item in same_weekday) / len(same_weekday)
+        if same_weekday
+        else None
+    )
+
+    return {
+        "yesterday_plan": last_plan_payload,
+        "today_completed": get_today_summary()["tasks_completed"],
+        "history": history,
+        "tomorrow_weekday": tomorrow_weekday,
+        "tomorrow_weekday_avg_planned": avg_planned,
+        "tomorrow_weekday_avg_completed": avg_completed,
+    }
+
+
+def get_weekly_event_summary() -> dict[str, Any]:
+    conn = get_connection()
+    week_start = (date.today() - timedelta(days=6)).isoformat()
+    today = _today_str()
+
+    tasks = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM events
+        WHERE event_type = 'task_complete'
+          AND date(created_at) BETWEEN date(?) AND date(?)
+        """,
+        (week_start, today),
+    ).fetchone()["count"]
+
+    focus_sessions = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM events
+        WHERE event_type = 'focus_complete'
+          AND date(created_at) BETWEEN date(?) AND date(?)
+        """,
+        (week_start, today),
+    ).fetchone()["count"]
+
+    focus_minutes = conn.execute(
+        """
+        SELECT COALESCE(SUM(json_extract(data, '$.duration_minutes')), 0) AS total
+        FROM events
+        WHERE event_type = 'focus_complete'
+          AND date(created_at) BETWEEN date(?) AND date(?)
+        """,
+        (week_start, today),
+    ).fetchone()["total"]
+
+    records = get_records()
+    records_this_week = []
+    for record_type, record in records.items():
+        achieved = str(record.get("achieved_at", ""))[:10]
+        if achieved >= week_start:
+            records_this_week.append(
+                {
+                    "type": record_type,
+                    "value": record["value"],
+                    "label": format_record_label(record_type),
+                }
+            )
+
+    history = get_weekly_history(weeks=2)
+    current_week = history[-1] if history else {}
+    previous_week = history[-2] if len(history) >= 2 else {}
+
+    return {
+        "tasks_completed": int(tasks),
+        "focus_sessions": int(focus_sessions),
+        "focus_minutes": int(focus_minutes),
+        "records_broken": records_this_week,
+        "current_rank": current_week.get("rank"),
+        "previous_rank": previous_week.get("rank"),
+        "current_week_tasks": current_week.get("tasks_completed", 0),
+        "previous_week_tasks": previous_week.get("tasks_completed", 0),
+    }
+
+
+def build_llm_context() -> dict[str, Any]:
+    """Compact behavioral profile for any LLM prompt."""
+    return {
+        "stats": get_stats(),
+        "today": get_today_summary(),
+        "yesterday": get_yesterday_summary(),
+        "capacity": get_capacity_insights(),
+        "focus": get_focus_stats(),
+        "records": get_records(),
+        "weekly": get_weekly_history(weeks=2),
+        "week_tasks_so_far": get_week_tasks_so_far(),
+        "plan_adherence": get_plan_adherence_insights(),
     }
 
 
