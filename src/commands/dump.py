@@ -10,25 +10,36 @@ from datetime import date, datetime
 from todoist_api_python.api import TodoistAPI
 
 from src.config import MAX_WIDTH, TODOIST_API_KEY
-from src.db import log_brain_dump
+from src.db import build_llm_context, log_brain_dump
 from src.llm import LLMError, llm_complete
+from src.llm_context import format_context_block
 from src.printer import get_printer, print_centered
 
 PRIORITY_LABELS = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
 
 
 def build_system_prompt(today: date) -> str:
+    context = build_llm_context()
+    profile = format_context_block(
+        context,
+        sections=["stats", "today", "capacity", "focus"],
+    )
+
     return f"""You are a task decomposition assistant for someone with ADHD.
 
 Today is {today.isoformat()} ({today.strftime("%A")}).
 
+{profile}
+
 Break vague brain-dump input into 3-8 concrete Todoist tasks. Rules:
-- Each task must be completable in one sitting (15-30 minutes max)
+- Each task must be completable in one sitting (15-30 minutes max, or match their average focus length if known)
 - Use specific, actionable wording (start with a verb)
 - Spread tasks across days; do not overload a single day
+- If they already completed many tasks today, cap new tasks per day at 1-2 and spread the rest
+- Respect their weekday average; never schedule more per day than their typical capacity
 - Infer due dates from context (e.g. "friday presentation" -> tasks before Friday)
 - Priority: 1 = most urgent, 4 = lowest
-- duration_minutes: integer estimate (15-30 typical)
+- duration_minutes: integer estimate (15-30 typical, or their focus session average)
 
 Respond with ONLY valid JSON (no markdown fences), in this shape:
 {{

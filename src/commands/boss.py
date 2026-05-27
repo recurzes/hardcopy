@@ -4,7 +4,9 @@ from escpos.printer import Usb
 from todoist_api_python.api import TodoistAPI
 
 from src.config import TODOIST_API_KEY
-from src.db import compute_boss_rank, get_weekly_history, log_boss_fight
+from src.db import compute_boss_rank, get_weekly_event_summary, get_weekly_history, log_boss_fight
+from src.llm import LLMError, llm_complete
+from src.llm_context import format_weekly_summary_block
 from src.printer import get_printer
 
 XP_PER_TASK = 100
@@ -68,6 +70,47 @@ def improvement_note(history: list[dict]) -> str | None:
     return f"TASKS UP {pct}% FROM LAST WEEK"
 
 
+def generate_weekly_debrief(
+    *,
+    rank: str,
+    total_tasks: int,
+    boss_defeated: bool,
+    history: list[dict],
+) -> str | None:
+    try:
+        summary = get_weekly_event_summary()
+        summary.update(
+            {
+                "rank": rank,
+                "boss_defeated": boss_defeated,
+                "weekly_goal": WEEKLY_GOAL_TASKS,
+                "trend": format_trend_line(history),
+            }
+        )
+        system_prompt = """You write a short weekly debrief for someone with ADHD.
+
+Write 3-5 short lines in past tense, RPG quest log style.
+Celebrate concrete wins from the data. Counter the feeling of "I did nothing."
+No markdown. Keep each line under 42 characters when possible."""
+        user_prompt = format_weekly_summary_block(summary)
+        return llm_complete(system_prompt, user_prompt).strip()
+    except LLMError as e:
+        print(f"Weekly debrief skipped (LLM): {e}")
+        return None
+    except Exception as e:
+        print(f"Weekly debrief skipped: {e}")
+        return None
+
+
+def print_weekly_debrief(p, debrief: str) -> None:
+    p.text("WEEKLY DEBRIEF:\n")
+    for line in debrief.splitlines()[:5]:
+        line = line.strip()
+        if line:
+            p.text(f"{line}\n")
+    p.text("\n")
+
+
 def main():
     try:
         if not TODOIST_API_KEY:
@@ -123,6 +166,15 @@ def main():
 
         if improvement:
             p.text(f"{improvement}\n\n")
+
+        debrief = generate_weekly_debrief(
+            rank=rank,
+            total_tasks=total_tasks,
+            boss_defeated=boss_defeated,
+            history=history,
+        )
+        if debrief:
+            print_weekly_debrief(p, debrief)
 
         p.set(align="center", bold=True)
         if boss_defeated:
