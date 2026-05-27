@@ -1,4 +1,6 @@
 annotated-doc==0.0.4
+anthropic>=0.30
+openai>=1.0
 annotated-types==0.7.0
 anyio==4.12.1
 appdirs==1.4.4
