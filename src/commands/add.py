@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from todoist_api_python.api import TodoistAPI
 
 from src.config import TODOIST_API_KEY
+from src.db import log_quick_capture
 
 PRIORITY_PATTERN = re.compile(r"!([1-4])\b")
 
@@ -137,6 +138,11 @@ def main(argv: list[str] | None = None) -> int:
         print(format_confirmation(created[0]))
     else:
         print(f"Added {len(created)} tasks.")
+
+    try:
+        log_quick_capture(len(created))
+    except Exception as e:
+        print(f"Database error: {e}")
 
     return 0
 

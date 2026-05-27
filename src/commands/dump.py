@@ -10,6 +10,7 @@ from datetime import date, datetime
 from todoist_api_python.api import TodoistAPI
 
 from src.config import MAX_WIDTH, TODOIST_API_KEY
+from src.db import log_brain_dump
 from src.llm import LLMError, llm_complete
 from src.printer import get_printer, print_centered
 
@@ -338,6 +339,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\nCreated {len(created)} tasks in Todoist:")
     for task in created:
         print(format_task_preview(task))
+
+    try:
+        log_brain_dump(len(created))
+    except Exception as e:
+        print(f"Database error: {e}")
 
     if not args.no_print and confirm_print_receipt(assume_yes=args.yes):
         print_briefing_receipt(created)
