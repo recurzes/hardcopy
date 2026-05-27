@@ -26,6 +26,7 @@ hardcopy/
 │   └── commands/
 │       ├── todos.py       # daily task contract
 │       ├── dump.py        # brain dump → Todoist tasks
+│       ├── add.py         # quick task capture
 │       ├── habits.py      # habit checklist
 │       ├── reward.py      # reward slip printing
 │       ├── boss.py        # weekly raid report
@@ -92,6 +93,29 @@ python -m src.commands.dump "buy groceries and call dentist" -y
 Flow: LLM decomposes your text → preview → confirm (`Y`/`n`, or `e` to edit) → tasks created in Todoist → optional "Quest Briefing" receipt print.
 
 Requires `LLM_PROVIDER` and `LLM_API_KEY` (for OpenAI/Anthropic) in `.env`. For local models, use `LLM_PROVIDER=ollama` and optionally set `OLLAMA_HOST`.
+
+### Quick Capture
+
+Add tasks to Todoist with minimal friction:
+
+```bash
+# Just the task
+python -m src.commands.add "buy groceries"
+
+# Natural language date
+python -m src.commands.add "call dentist tomorrow"
+
+# Priority (!1 = urgent, !4 = low)
+python -m src.commands.add "submit report by friday !1"
+
+# Multiple tasks (semicolon-separated)
+python -m src.commands.add "laundry today; groceries tomorrow; clean kitchen friday"
+
+# Interactive prompt
+python -m src.commands.add
+```
+
+Dates are passed to Todoist's natural-language parser — no extra dependencies.
 
 ## Scheduled Automation
 
