@@ -1,0 +1,11 @@
+[Unit]
+Description=Hardcopy - Evening planner at 21:00
+Requires=hardcopy-planner.service
+
+[Timer]
+OnCalendar=*-*-* 21:00:00
+Persistent=true
+Unit=hardcopy-planner.service
+
+[Install]
+WantedBy=timers.target
