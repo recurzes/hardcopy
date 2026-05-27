@@ -27,6 +27,7 @@ hardcopy/
 │       ├── todos.py       # daily task contract
 │       ├── dump.py        # brain dump → Todoist tasks
 │       ├── add.py         # quick task capture
+│       ├── plan.py        # evening auto-planner
 │       ├── habits.py      # habit checklist
 │       ├── reward.py      # reward slip printing
 │       ├── boss.py        # weekly raid report
@@ -117,6 +118,22 @@ python -m src.commands.add
 
 Dates are passed to Todoist's natural-language parser — no extra dependencies.
 
+### Evening Planner
+
+LLM drafts tomorrow's plan from your Todoist backlog:
+
+```bash
+# Interactive — preview, confirm, optionally apply
+python -m src.commands.plan
+
+# Non-interactive (systemd) — apply + print receipt
+python -m src.commands.plan --auto
+```
+
+Flow: analyzes overdue/upcoming/unscheduled tasks → LLM suggests 3–8 tasks sized to your recent completion rate → confirm (`Y`/`n`/`e`) → optionally reschedules to tomorrow → prints "Tomorrow's Battle Plan" receipt.
+
+Requires `LLM_PROVIDER` and `LLM_API_KEY` in `.env`.
+
 ## Scheduled Automation
 
 Install user systemd units (no root required for the services themselves):
@@ -134,6 +151,7 @@ Optional ngrok tunnel service (requires `NGROK_DOMAIN` in `.env`):
 
 This enables:
 - **10:00 daily** — print today's Todoist tasks
+- **21:00 daily** — evening auto-planner (draft + apply tomorrow's plan)
 - **Sunday 20:00** — weekly boss report
 - **Always on** — webhook reward server on `127.0.0.1:8000`
 
@@ -150,6 +168,7 @@ Manual trigger:
 ```bash
 systemctl --user start hardcopy-todos.service
 systemctl --user start hardcopy-boss.service
+systemctl --user start hardcopy-planner.service
 ```
 
 Timers run while logged out after enabling linger:
