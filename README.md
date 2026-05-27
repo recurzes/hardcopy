@@ -28,6 +28,7 @@ hardcopy/
 │       ├── dump.py        # brain dump → Todoist tasks
 │       ├── add.py         # quick task capture
 │       ├── plan.py        # evening auto-planner
+│       ├── split.py       # split big tasks into subtasks
 │       ├── habits.py      # habit checklist
 │       ├── reward.py      # reward slip printing
 │       ├── boss.py        # weekly raid report
@@ -131,6 +132,24 @@ python -m src.commands.plan --auto
 ```
 
 Flow: analyzes overdue/upcoming/unscheduled tasks → LLM suggests 3–8 tasks sized to your recent completion rate → confirm (`Y`/`n`/`e`) → optionally reschedules to tomorrow → prints "Tomorrow's Battle Plan" receipt.
+
+Requires `LLM_PROVIDER` and `LLM_API_KEY` in `.env`.
+
+### Task Splitter
+
+Break overwhelming Todoist tasks into 15–30 minute micro-quests:
+
+```bash
+# Scan for splittable tasks (interactive Y/n/s per task)
+python -m src.commands.split
+
+# Split all candidates without prompting
+python -m src.commands.split -y
+```
+
+Flow: scans for large/vague tasks → LLM proposes 3–7 subtasks → confirm → creates Todoist subtasks → prints "Quest Breakdown" receipt.
+
+When the webhook server is running, newly added tasks that look too big trigger a "Quest Too Big To Solo" suggestion receipt (subscribe to `item:added` in Todoist webhooks).
 
 Requires `LLM_PROVIDER` and `LLM_API_KEY` in `.env`.
 
