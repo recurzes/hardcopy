@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta
 from todoist_api_python.api import TodoistAPI
 
 from src.config import MAX_WIDTH, TODOIST_API_KEY
+from src.db import get_capacity_insights, log_plan_generated
 from src.llm import LLMError, llm_complete
 from src.printer import get_printer, print_centered
 
@@ -113,7 +114,20 @@ def gather_context(api: TodoistAPI) -> dict:
 
     completed_last_7_days = fetch_recent_completion_count(api)
     recent_daily_average = completed_last_7_days / 7
-    suggested_task_count = int(min(max(round(recent_daily_average), 3), 8))
+
+    capacity = get_capacity_insights(today)
+    weekday_avg = capacity.get("weekday_average")
+    overall_avg = capacity.get("overall_average")
+
+    if weekday_avg is not None:
+        suggested_task_count = int(min(max(round(weekday_avg), 3), 8))
+        capacity_source = f"{today.strftime('%A')} average"
+    elif overall_avg is not None:
+        suggested_task_count = int(min(max(round(overall_avg), 3), 8))
+        capacity_source = "your overall average"
+    else:
+        suggested_task_count = int(min(max(round(recent_daily_average), 3), 8))
+        capacity_source = "Todoist last 7 days"
 
     return {
         "today": today,
@@ -122,6 +136,8 @@ def gather_context(api: TodoistAPI) -> dict:
         "completed_last_7_days": completed_last_7_days,
         "recent_daily_average": recent_daily_average,
         "suggested_task_count": suggested_task_count,
+        "capacity_source": capacity_source,
+        "capacity": capacity,
         "task_by_id": {task.id: task for task in tasks},
     }
 
@@ -131,13 +147,35 @@ def build_system_prompt(context: dict) -> str:
     tomorrow = context["tomorrow"]
     suggested = context["suggested_task_count"]
     avg = context["recent_daily_average"]
+    capacity = context.get("capacity", {})
+    capacity_source = context.get("capacity_source", "recent pace")
+    weekday_avg = capacity.get("weekday_average")
+    overall_avg = capacity.get("overall_average")
+    peak_hour = capacity.get("peak_hour")
+
+    capacity_lines = [
+        f"The user typically completes ~{avg:.1f} tasks/day (Todoist last 7 days).",
+        f"Suggest about {suggested} tasks total for tomorrow based on {capacity_source} (never more than 8 unless overdue tasks alone exceed that).",
+    ]
+    if weekday_avg is not None:
+        capacity_lines.append(
+            f"They average {weekday_avg:.1f} tasks on {today.strftime('%A')}s."
+        )
+    if overall_avg is not None and weekday_avg is None:
+        capacity_lines.append(f"Their overall average is {overall_avg:.1f} tasks/day.")
+    if peak_hour is not None:
+        capacity_lines.append(
+            f"Their most productive hour is around {peak_hour:02d}:00."
+        )
+
+    capacity_text = "\n".join(capacity_lines)
 
     return f"""You are an evening planning assistant for someone with ADHD.
 
 Today is {today.isoformat()} ({today.strftime("%A")}).
 Tomorrow is {tomorrow.isoformat()} ({tomorrow.strftime("%A")}).
 
-The user typically completes ~{avg:.1f} tasks/day. Suggest about {suggested} tasks total for tomorrow (never more than 8 unless overdue tasks alone exceed that).
+{capacity_text}
 
 Rules:
 - ALWAYS include every overdue task
@@ -438,12 +476,21 @@ def print_battle_plan_receipt(plan: dict, context: dict) -> None:
     total_minutes = plan.get("total_estimated_minutes") or 0
     total_count = len(plan["tasks"])
     avg = round(context["recent_daily_average"])
+    capacity = context.get("capacity", {})
+    daily_streak = int(capacity.get("daily_streak", 0))
+    last_active = capacity.get("last_active_date")
+    today_str = context["today"].isoformat()
+    streak_at_risk = daily_streak > 0 and last_active != today_str
 
     p.text("--------------------------------\n")
     p.set(align="center", bold=True)
     footer = f"Total: {format_duration(total_minutes)} | {total_count} quests\n"
     p.text(footer)
     p.text(f"You averaged {avg}/day last week.\n")
+    if context.get("capacity_source"):
+        p.text(f"Target based on {context['capacity_source']}.\n")
+    if streak_at_risk:
+        p.text(f"Complete 1 task to keep your {daily_streak}-day streak!\n")
     p.text(f"{plan.get('capacity_note', 'This plan is right-sized.')}\n")
     p.set(align="left", bold=False)
     p.text("\n\n")
@@ -512,6 +559,15 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     print_battle_plan_receipt(plan, context)
+
+    try:
+        log_plan_generated(
+            len(plan["tasks"]),
+            plan.get("total_estimated_minutes"),
+        )
+    except Exception as e:
+        print(f"Database error: {e}")
+
     return 0
 
 

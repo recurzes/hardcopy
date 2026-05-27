@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import random
 import signal
 import sys
@@ -9,7 +8,6 @@ import textwrap
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from todoist_api_python.api import TodoistAPI
 
@@ -22,6 +20,12 @@ from src.commands.reward import (
     print_ascii_art,
 )
 from src.config import MAX_WIDTH, TODOIST_API_KEY
+from src.db import (
+    get_focus_streak_state,
+    log_focus_session,
+    print_level_up_receipt,
+    print_new_record_lines,
+)
 from src.printer import get_printer, print_centered
 
 FOCUS_XP_MULTIPLIER = 1.5
@@ -30,13 +34,6 @@ TIER_BASE_XP = {
     "rare": 150,
     "epic": 300,
     "legendary": 500,
-}
-STREAK_PATH = Path.home() / ".local/share/hardcopy/focus_streaks.json"
-DEFAULT_STREAK = {
-    "current_streak": 0,
-    "last_session_date": None,
-    "total_sessions": 0,
-    "total_minutes": 0,
 }
 
 
@@ -63,45 +60,7 @@ def parse_duration(raw: str) -> int:
 
 
 def load_streak_state() -> dict:
-    if not STREAK_PATH.exists():
-        return dict(DEFAULT_STREAK)
-    try:
-        with STREAK_PATH.open(encoding="utf-8") as f:
-            data = json.load(f)
-        state = dict(DEFAULT_STREAK)
-        state.update(data)
-        return state
-    except (json.JSONDecodeError, OSError) as e:
-        print(f"Warning: could not read streak file: {e}")
-        return dict(DEFAULT_STREAK)
-
-
-def save_streak_state(state: dict) -> None:
-    STREAK_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with STREAK_PATH.open("w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2)
-
-
-def update_streak_on_complete(state: dict, minutes: int) -> tuple[dict, bool]:
-    today = datetime.now().date()
-    today_str = today.isoformat()
-    yesterday_str = (today - timedelta(days=1)).isoformat()
-    last_date = state.get("last_session_date")
-    streak_increased = False
-
-    if last_date == today_str:
-        pass
-    elif last_date == yesterday_str:
-        state["current_streak"] = int(state.get("current_streak", 0)) + 1
-        streak_increased = True
-    else:
-        state["current_streak"] = 1
-        streak_increased = last_date is None
-
-    state["last_session_date"] = today_str
-    state["total_sessions"] = int(state.get("total_sessions", 0)) + 1
-    state["total_minutes"] = int(state.get("total_minutes", 0)) + minutes
-    return state, streak_increased
+    return get_focus_streak_state()
 
 
 def calc_focus_xp(tier: str, *, partial_ratio: float = 1.0) -> int:
@@ -186,6 +145,10 @@ def print_session_complete_receipt(
     streak_increased: bool,
     total_sessions: int,
     total_minutes: int,
+    level: int | None = None,
+    total_xp: int | None = None,
+    daily_streak: int | None = None,
+    new_records: list[str] | None = None,
 ) -> None:
     p = get_printer()
     if not p:
@@ -222,8 +185,14 @@ def print_session_complete_receipt(
         streak_line += " (new!)"
     p.text(f"{streak_line}\n")
     hours = total_minutes // 60
-    p.text(f"TOTAL:  {total_sessions} sessions / {hours} hrs\n\n")
-    p.text(f'> "{flavor}" <\n')
+    p.text(f"TOTAL:  {total_sessions} sessions / {hours} hrs\n")
+    if level is not None and total_xp is not None:
+        p.text(f"LEVEL:  {level} ({total_xp} XP)\n")
+    if daily_streak:
+        p.text(f"DAY STREAK: {daily_streak}\n")
+    if new_records:
+        print_new_record_lines(p, new_records)
+    p.text(f'\n> "{flavor}" <\n')
     p.text("\n\n")
     p.cut()
     p.close()
@@ -322,9 +291,31 @@ def handle_interrupt(signum, frame) -> None:
         xp = calc_focus_xp(tier, partial_ratio=ratio * 0.5)
         print(f"\n\nSession ended early after {elapsed} minute(s).")
         print_partial_receipt(session, elapsed, xp)
+        try:
+            log_focus_session(
+                event_type="focus_partial",
+                task=session.task,
+                duration_minutes=session.duration_minutes,
+                elapsed_minutes=elapsed,
+                xp=xp,
+                tier=tier,
+            )
+        except Exception as e:
+            print(f"Database error: {e}")
     else:
         print("\n\nSession abandoned.")
         print_abandoned_receipt(session)
+        try:
+            log_focus_session(
+                event_type="focus_abandoned",
+                task=session.task,
+                duration_minutes=session.duration_minutes,
+                elapsed_minutes=elapsed,
+                xp=0,
+                tier="common",
+            )
+        except Exception as e:
+            print(f"Database error: {e}")
 
     sys.exit(0)
 
@@ -415,19 +406,55 @@ def main(argv: list[str] | None = None) -> int:
 
     tier = get_reward_tier()
     xp = calc_focus_xp(tier)
-    streak_state, streak_increased = update_streak_on_complete(
-        streak_state, session.duration_minutes
-    )
-    save_streak_state(streak_state)
+
+    db_result: dict = {}
+    try:
+        db_result = log_focus_session(
+            event_type="focus_complete",
+            task=session.task,
+            duration_minutes=session.duration_minutes,
+            elapsed_minutes=session.duration_minutes,
+            xp=xp,
+            tier=tier,
+        )
+    except Exception as e:
+        print(f"Database error: {e}")
+        db_result = streak_state
 
     print_session_complete_receipt(
         session,
         xp=xp,
-        streak=int(streak_state["current_streak"]),
-        streak_increased=streak_increased,
-        total_sessions=int(streak_state["total_sessions"]),
-        total_minutes=int(streak_state["total_minutes"]),
+        streak=int(
+            db_result.get(
+                "current_focus_streak",
+                streak_state.get("current_streak", 0),
+            )
+        ),
+        streak_increased=bool(db_result.get("focus_streak_increased")),
+        total_sessions=int(
+            db_result.get(
+                "total_focus_sessions",
+                streak_state.get("total_sessions", 0),
+            )
+        ),
+        total_minutes=int(
+            db_result.get(
+                "total_focus_minutes",
+                streak_state.get("total_minutes", 0),
+            )
+        ),
+        level=db_result.get("level"),
+        total_xp=db_result.get("total_xp"),
+        daily_streak=db_result.get("daily_streak"),
+        new_records=db_result.get("new_records"),
     )
+
+    if db_result.get("leveled_up"):
+        print_level_up_receipt(
+            db_result["old_level"],
+            db_result["level"],
+            db_result["total_xp"],
+        )
 
     if args.complete:
         complete_todoist_task(session.task)
