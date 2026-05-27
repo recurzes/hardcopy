@@ -14,7 +14,7 @@ def load_student_ids(csv_path):
 
 
 def main():
-    csv_path = "trash/cleaned_combined.csv"
+    csv_path = "../../trash/cleaned_combined.csv"
     student_ids = load_student_ids(csv_path)
 
     print(f"Total IDs available: {len(student_ids)}")
