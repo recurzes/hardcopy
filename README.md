@@ -37,6 +37,7 @@ hardcopy/
 │       ├── quiz_ingest.py # study note ingestion + Q&A pre-generation
 │       ├── quiz.py        # quiz daemon (scheduled Q&A printing)
 │       ├── quiz_answer.py # manual answer trigger
+│       ├── quotes_seed.py # coding quotes seeder (300+ quotes)
 │       └── barcodes.py    # barcode utility
 ├── systemd/               # user systemd unit templates
 ├── scripts/               # install helpers
@@ -243,23 +244,38 @@ Requires `LLM_PROVIDER` and `LLM_API_KEY` in `.env`.
 
 ### Focus Session
 
-Pomodoro-style focus with printed start/end/checkpoint receipts:
+Classic Pomodoro-style focus session (no breaks) with printed start receipt (showing title, duration, start/end time, and 0% progress bar), 2 mid-session status updates (at 1/3 and 2/3 progress with motivational coding quotes), and completion reward:
 
 ```bash
 # 25-minute session (default)
 python -m src.commands.focus "work on presentation slides"
 
-# Custom duration (45 min with mid-session check-in)
+# Custom duration (45 min with mid-session status updates at 15m and 30m)
 python -m src.commands.focus "research paper outline" 45
 
 # Complete matching Todoist task when session finishes
 python -m src.commands.focus "draft meeting agenda" 25 --complete
 
-# Disable checkpoint receipt for long sessions
-python -m src.commands.focus "deep work block" 60 --no-checkin
+# Disable mid-session status update receipts
+python -m src.commands.focus "deep work block" 60 --no-updates
 ```
 
-Prints session start receipt, terminal countdown, optional halfway checkpoint (>30 min), completion reward with XP/streak, or partial credit on early exit (Ctrl+C after 1+ min). Streak data stored in `~/.local/share/hardcopy/focus_streaks.json`.
+Prints session start receipt, terminal countdown, status update receipts at 33% and 67% progress with random coding quotes, and completion reward with XP/streak.
+
+### Quotes Seeder
+
+Seed local SQLite database with 300+ short developer/coding quotes for focus update receipts and reward slips:
+
+```bash
+# Seed/update quotes database
+python -m src.commands.quotes_seed
+
+# View total quote count & sample quotes
+python -m src.commands.quotes_seed --list
+
+# Clear and re-seed quotes database
+python -m src.commands.quotes_seed --reset
+```
 
 ## Scheduled Automation
 
