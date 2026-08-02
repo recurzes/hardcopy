@@ -13,7 +13,6 @@ from todoist_api_python.api import TodoistAPI
 
 from src.commands.reward import (
     ASCII_FRAMES,
-    QUOTES,
     beep,
     get_reward_tier,
     get_time_bonus,
@@ -22,6 +21,7 @@ from src.commands.reward import (
 from src.config import MAX_WIDTH, TODOIST_API_KEY
 from src.db import (
     get_focus_streak_state,
+    get_random_quote,
     log_focus_session,
     print_level_up_receipt,
     print_new_record_lines,
@@ -44,7 +44,8 @@ class FocusSession:
     start_monotonic: float = field(default_factory=time.monotonic)
     start_clock: datetime = field(default_factory=datetime.now)
     checkin_enabled: bool = True
-    checkin_done: bool = False
+    update_1_done: bool = False
+    update_2_done: bool = False
     ended: bool = False
 
 
@@ -68,9 +69,14 @@ def calc_focus_xp(tier: str, *, partial_ratio: float = 1.0) -> int:
     return max(1, int(base * FOCUS_XP_MULTIPLIER * partial_ratio))
 
 
-def progress_bar(ratio: float, width: int = 30) -> str:
-    filled = int(width * min(max(ratio, 0.0), 1.0))
-    return "[" + "#" * filled + "-" * (width - filled) + "]"
+def progress_bar(ratio: float, width: int = 28) -> str:
+    ratio = min(max(ratio, 0.0), 1.0)
+    if ratio == 0.0:
+        return "[>" + " " * (width - 1) + "]"
+    filled = int(width * ratio)
+    if filled >= width:
+        return "[" + "=" * width + "]"
+    return "[" + "=" * filled + ">" + " " * (width - filled - 1) + "]"
 
 
 def wrap_text(p, text: str, *, indent: str = "", bold: bool = False) -> None:
@@ -93,45 +99,51 @@ def print_session_start_receipt(session: FocusSession, streak: int) -> None:
 
     p.text("\n")
     print_centered(p, "================================")
-    print_centered(p, "   FOCUS SESSION ACTIVE")
-    print_centered(p, f"   {start_label} -> {end_label} ({session.duration_minutes} min)")
+    print_centered(p, "   FOCUS SESSION")
     print_centered(p, "================================")
     p.text("\n")
     p.set(align="left", font="a", bold=False)
-    p.text("YOUR ONLY QUEST:\n")
+    p.text("TASK:\n")
     wrap_text(p, f'"{session.task}"')
-    p.text("\nRULES OF ENGAGEMENT:\n")
-    p.text("- Phone on silent\n")
-    p.text("- One tab only\n")
-    p.text("- If stuck, write what's\n")
-    p.text("  blocking you on paper\n\n")
-    p.text(f"STREAK: {streak} sessions\n")
+    p.text(f"\nDuration : {session.duration_minutes} min\n")
+    p.text(f"Started  : {start_label}\n")
+    p.text(f"Ends at  : {end_label}\n\n")
+    p.text("Progress :\n")
+    p.text(f"{progress_bar(0.0)}\n")
+    p.text("  0% — Lock in. Let's go.\n")
+    if streak > 0:
+        p.text(f"\nSTREAK   : {streak} sessions\n")
     print_centered(p, "================================")
     p.text("\n\n")
     p.cut()
     p.close()
 
 
-def print_checkpoint_receipt(session: FocusSession, elapsed_minutes: int) -> None:
+def print_update_receipt(session: FocusSession, update_num: int, pct: int, remaining_min: int) -> None:
     p = get_printer()
     if not p:
         return
 
+    ratio = pct / 100.0
+    quote = get_random_quote()
+
     p.text("\n")
     print_centered(p, "================================")
-    print_centered(p, "   CHECKPOINT")
-    print_centered(
-        p,
-        f"   {elapsed_minutes} of {session.duration_minutes} minutes elapsed",
-    )
+    print_centered(p, f"   UPDATE #{update_num} — {pct}%")
     print_centered(p, "================================")
     p.text("\n")
     p.set(align="left", font="a", bold=False)
-    p.text("Still working on:\n")
+    p.text("TASK:\n")
     wrap_text(p, f'"{session.task}"')
-    p.text("\nAre you on track?\n")
-    p.text("[ ] Yes, still focused\n")
-    p.text("[ ] Drifted — refocusing now\n")
+    p.text("\nProgress :\n")
+    p.text(f"{progress_bar(ratio)}\n")
+    elapsed_min = session.duration_minutes - remaining_min
+    p.text(f"  {elapsed_min} min done | {remaining_min} min left\n\n")
+
+    p.set(align="left", font="a", bold=False)
+    p.text(f"> {quote} <\n")
+
+    print_centered(p, "================================")
     p.text("\n\n")
     p.cut()
     p.close()
@@ -158,7 +170,7 @@ def print_session_complete_receipt(
     start_label = session.start_clock.strftime("%H:%M")
     end_label = end_time.strftime("%H:%M")
     time_bonus = get_time_bonus()
-    flavor = random.choice(QUOTES)
+    flavor = get_random_quote()
     ascii_frame = random.choice(ASCII_FRAMES)
 
     beep(p)
@@ -192,7 +204,7 @@ def print_session_complete_receipt(
         p.text(f"DAY STREAK: {daily_streak}\n")
     if new_records:
         print_new_record_lines(p, new_records)
-    p.text(f'\n> "{flavor}" <\n')
+    p.text(f'\n> {flavor} <\n')
     p.text("\n\n")
     p.cut()
     p.close()
@@ -322,11 +334,8 @@ def handle_interrupt(signum, frame) -> None:
 
 def run_timer(session: FocusSession) -> None:
     total_seconds = session.duration_minutes * 60
-    checkin_at = (
-        total_seconds // 2
-        if session.checkin_enabled and session.duration_minutes > 30
-        else None
-    )
+    t1_seconds = total_seconds / 3.0
+    t2_seconds = (total_seconds * 2.0) / 3.0
 
     while True:
         elapsed_seconds = time.monotonic() - session.start_monotonic
@@ -335,11 +344,18 @@ def run_timer(session: FocusSession) -> None:
         if remaining <= 0:
             break
 
-        if checkin_at and not session.checkin_done and elapsed_seconds >= checkin_at:
-            elapsed_min = int(elapsed_seconds // 60)
-            print("\n\nCheckpoint — printing check-in receipt...")
-            print_checkpoint_receipt(session, elapsed_min)
-            session.checkin_done = True
+        if session.checkin_enabled:
+            if not session.update_1_done and elapsed_seconds >= t1_seconds:
+                remaining_min = max(1, int(round((total_seconds - elapsed_seconds) / 60)))
+                print("\n\nProgress Update 1 (33%) — printing receipt...")
+                print_update_receipt(session, update_num=1, pct=33, remaining_min=remaining_min)
+                session.update_1_done = True
+
+            elif not session.update_2_done and elapsed_seconds >= t2_seconds:
+                remaining_min = max(1, int(round((total_seconds - elapsed_seconds) / 60)))
+                print("\n\nProgress Update 2 (67%) — printing receipt...")
+                print_update_receipt(session, update_num=2, pct=67, remaining_min=remaining_min)
+                session.update_2_done = True
 
         mins, secs = divmod(int(remaining), 60)
         ratio = elapsed_seconds / total_seconds
@@ -365,9 +381,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Session length in minutes (default: 25, suffix m optional)",
     )
     parser.add_argument(
+        "--no-updates",
         "--no-checkin",
         action="store_true",
-        help="Disable mid-session check-in receipt for long sessions",
+        dest="no_updates",
+        help="Disable mid-session status update receipts (at 1/3 and 2/3)",
     )
     parser.add_argument(
         "--complete",
@@ -386,7 +404,7 @@ def main(argv: list[str] | None = None) -> int:
     session = FocusSession(
         task=args.task.strip(),
         duration_minutes=duration_minutes,
-        checkin_enabled=not args.no_checkin,
+        checkin_enabled=not args.no_updates,
     )
     _session = session
 
