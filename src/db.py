@@ -104,6 +104,35 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             value INTEGER NOT NULL,
             achieved_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
+
+        CREATE TABLE IF NOT EXISTS quiz_knowledge (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_file TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            content     TEXT NOT NULL,
+            embedding   BLOB NOT NULL,
+            created_at  TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS quiz_pool (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            question     TEXT NOT NULL,
+            answer       TEXT NOT NULL,
+            source_chunk INTEGER REFERENCES quiz_knowledge(id),
+            status       TEXT NOT NULL DEFAULT 'pending',
+            created_at   TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS quiz_history (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            pool_id      INTEGER REFERENCES quiz_pool(id),
+            question     TEXT NOT NULL,
+            answer       TEXT NOT NULL,
+            source_chunk INTEGER REFERENCES quiz_knowledge(id),
+            status       TEXT NOT NULL DEFAULT 'question_printed',
+            asked_at     TEXT DEFAULT (datetime('now', 'localtime')),
+            answered_at  TEXT
+        );
         """
     )
 
@@ -1029,3 +1058,175 @@ def print_new_record_lines(p, new_records: list[str]) -> None:
         label = format_record_label(record_type)
         print_centered(p, f"*** NEW RECORD: {label} ***")
     print_centered(p, "================================")
+
+
+# ---------------------------------------------------------------------------
+# Quiz helpers
+# ---------------------------------------------------------------------------
+
+def insert_knowledge_chunks(chunks: list[dict]) -> None:
+    """Batch-insert embedded note chunks into quiz_knowledge.
+
+    Each item in `chunks` must have keys:
+      source_file (str), chunk_index (int), content (str), embedding (bytes)
+    """
+    conn = get_connection()
+    conn.executemany(
+        """
+        INSERT INTO quiz_knowledge (source_file, chunk_index, content, embedding)
+        VALUES (:source_file, :chunk_index, :content, :embedding)
+        """,
+        chunks,
+    )
+    conn.commit()
+
+
+def bulk_insert_quiz_pool(qa_pairs: list[dict]) -> None:
+    """Batch-insert pre-generated Q&A pairs into quiz_pool.
+
+    Each item must have keys: question (str), answer (str), source_chunk (int|None)
+    """
+    conn = get_connection()
+    conn.executemany(
+        """
+        INSERT INTO quiz_pool (question, answer, source_chunk)
+        VALUES (:question, :answer, :source_chunk)
+        """,
+        qa_pairs,
+    )
+    conn.commit()
+
+
+def pop_next_quiz() -> dict | None:
+    """Pop the oldest pending question from quiz_pool, record it in quiz_history.
+
+    Returns a dict with keys: history_id, pool_id, question, answer, source_chunk.
+    Returns None if the pool is empty.
+    """
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM quiz_pool WHERE status = 'pending' ORDER BY id ASC LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return None
+
+    pool_id = row["id"]
+    conn.execute(
+        "UPDATE quiz_pool SET status = 'used' WHERE id = ?", (pool_id,)
+    )
+    cur = conn.execute(
+        """
+        INSERT INTO quiz_history (pool_id, question, answer, source_chunk, status)
+        VALUES (?, ?, ?, ?, 'question_printed')
+        """,
+        (pool_id, row["question"], row["answer"], row["source_chunk"]),
+    )
+    conn.commit()
+    return {
+        "history_id": cur.lastrowid,
+        "pool_id": pool_id,
+        "question": row["question"],
+        "answer": row["answer"],
+        "source_chunk": row["source_chunk"],
+    }
+
+
+def get_pending_quiz() -> dict | None:
+    """Return the most recent unanswered quiz_history row, or None."""
+    conn = get_connection()
+    row = conn.execute(
+        """
+        SELECT h.*, k.source_file
+        FROM quiz_history h
+        LEFT JOIN quiz_knowledge k ON h.source_chunk = k.id
+        WHERE h.status = 'question_printed'
+        ORDER BY h.id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    if row is None:
+        return None
+    return dict(row)
+
+
+def mark_quiz_answered(history_id: int) -> None:
+    """Mark a quiz_history row as answered with the current timestamp."""
+    conn = get_connection()
+    conn.execute(
+        """
+        UPDATE quiz_history
+        SET status = 'answered', answered_at = ?
+        WHERE id = ?
+        """,
+        (_now_local(), history_id),
+    )
+    conn.commit()
+
+
+def count_quiz_pool() -> int:
+    """Return the number of pending questions remaining in quiz_pool."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM quiz_pool WHERE status = 'pending'"
+    ).fetchone()
+    return row["cnt"] if row else 0
+
+
+def clear_quiz_knowledge() -> None:
+    """Wipe quiz_knowledge and quiz_pool (use before a fresh --reset ingest)."""
+    conn = get_connection()
+    conn.executescript(
+        """
+        DELETE FROM quiz_pool;
+        DELETE FROM quiz_knowledge;
+        """
+    )
+    conn.commit()
+
+
+def list_knowledge_sources() -> list[dict]:
+    """Return a list of ingested source files with chunk counts."""
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT source_file,
+               COUNT(*) AS chunk_count,
+               MAX(created_at) AS last_ingested
+        FROM quiz_knowledge
+        GROUP BY source_file
+        ORDER BY last_ingested DESC
+        """
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_quiz_history(limit: int = 10) -> list[dict]:
+    """Return the most recent quiz_history rows."""
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT h.id, h.question, h.answer, h.status, h.asked_at, h.answered_at,
+               k.source_file
+        FROM quiz_history h
+        LEFT JOIN quiz_knowledge k ON h.source_chunk = k.id
+        ORDER BY h.id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_quiz_by_id(history_id: int) -> dict | None:
+    """Return a single quiz_history row by its ID."""
+    conn = get_connection()
+    row = conn.execute(
+        """
+        SELECT h.*, k.source_file
+        FROM quiz_history h
+        LEFT JOIN quiz_knowledge k ON h.source_chunk = k.id
+        WHERE h.id = ?
+        """,
+        (history_id,),
+    ).fetchone()
+    return dict(row) if row else None
