@@ -73,6 +73,7 @@ UNITS=(
     hardcopy-boss.timer
     hardcopy-planner.service
     hardcopy-planner.timer
+    hardcopy-quiz.service
 )
 
 if [[ $WITH_NGROK -eq 1 ]]; then
@@ -90,6 +91,7 @@ systemctl --user enable --now hardcopy-todos.timer
 systemctl --user enable --now hardcopy-boss.timer
 systemctl --user enable --now hardcopy-planner.timer
 systemctl --user enable --now hardcopy-rewards.service
+systemctl --user enable --now hardcopy-quiz.service
 
 if [[ $WITH_NGROK -eq 1 ]]; then
     systemctl --user enable --now hardcopy-ngrok.service
@@ -108,11 +110,20 @@ Logs:
   journalctl --user -u hardcopy-boss.service
   journalctl --user -u hardcopy-planner.service
   journalctl --user -u hardcopy-rewards.service
+  journalctl --user -u hardcopy-quiz.service
 
 Manual runs:
   systemctl --user start hardcopy-todos.service
   systemctl --user start hardcopy-boss.service
   systemctl --user start hardcopy-planner.service
+
+Quiz commands:
+  # Ingest study notes and pre-generate 50 questions
+  python -m src.commands.quiz_ingest /path/to/notes.pdf
+  # Manually print the current pending answer
+  python -m src.commands.quiz_answer
+  # List recent quiz history
+  python -m src.commands.quiz_answer --history
 
 Timers also run when logged out after enabling linger:
   loginctl enable-linger "$USER"

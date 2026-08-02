@@ -1,0 +1,14 @@
+[Unit]
+Description=Hardcopy - Quiz daemon (RAG-powered study quizzes)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@HARDCOPY_ROOT@
+EnvironmentFile=-@HARDCOPY_ROOT@/.env
+ExecStart=@HARDCOPY_PYTHON@ -m src.commands.quiz
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
