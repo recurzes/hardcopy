@@ -133,6 +133,14 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             asked_at     TEXT DEFAULT (datetime('now', 'localtime')),
             answered_at  TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS quotes (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            text       TEXT NOT NULL UNIQUE,
+            author     TEXT,
+            source     TEXT,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        );
         """
     )
 
@@ -1230,3 +1238,68 @@ def get_quiz_by_id(history_id: int) -> dict | None:
         (history_id,),
     ).fetchone()
     return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Quotes helpers
+# ---------------------------------------------------------------------------
+
+def insert_quotes(quotes_list: list[dict]) -> int:
+    """Insert quotes list into quotes table using INSERT OR IGNORE.
+
+    Each item should have 'text' and optionally 'author', 'source'.
+    Returns number of new quotes inserted.
+    """
+    conn = get_connection()
+    before = count_quotes()
+    conn.executemany(
+        """
+        INSERT OR IGNORE INTO quotes (text, author, source)
+        VALUES (:text, :author, :source)
+        """,
+        quotes_list,
+    )
+    conn.commit()
+    after = count_quotes()
+    return after - before
+
+
+def count_quotes() -> int:
+    """Return total count of quotes in database."""
+    conn = get_connection()
+    row = conn.execute("SELECT COUNT(*) as cnt FROM quotes").fetchone()
+    return row["cnt"] if row else 0
+
+
+def get_random_quote() -> str:
+    """Return a random quote string formatted for receipt display.
+
+    Falls back to hardcoded list if database has no quotes.
+    """
+    import random
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT text, author FROM quotes ORDER BY RANDOM() LIMIT 1"
+    ).fetchone()
+
+    if row and row["text"]:
+        text = row["text"].strip()
+        author = row["author"].strip() if row["author"] else None
+        if author and author.lower() != "unknown":
+            return f'"{text}" — {author}'
+        return f'"{text}"'
+
+    # Fallback to hardcoded list
+    try:
+        from src.commands.reward import QUOTES
+        return random.choice(QUOTES)
+    except Exception:
+        return "One step closer."
+
+
+def clear_quotes() -> None:
+    """Wipe all stored quotes."""
+    conn = get_connection()
+    conn.execute("DELETE FROM quotes")
+    conn.commit()
+
