@@ -33,6 +33,10 @@ hardcopy/
 │       ├── habits.py      # habit checklist
 │       ├── reward.py      # reward slip printing
 │       ├── boss.py        # weekly raid report
+│       ├── freegames.py   # free games loot drop receipt
+│       ├── quiz_ingest.py # study note ingestion + Q&A pre-generation
+│       ├── quiz.py        # quiz daemon (scheduled Q&A printing)
+│       ├── quiz_answer.py # manual answer trigger
 │       └── barcodes.py    # barcode utility
 ├── systemd/               # user systemd unit templates
 ├── scripts/               # install helpers
@@ -75,8 +79,91 @@ Root scripts delegate to `src/commands/`:
 - **Printing Current Tasks:** `python -m src.commands.todos`
 - **Printing Habits:** `python -m src.commands.habits`
 - **Weekly Boss Report:** `python -m src.commands.boss`
+- **Free Games Loot Drop:** `python -m src.commands.freegames`
+- **Quiz Daemon:** `python -m src.commands.quiz`
+- **Manual Answer Trigger:** `python -m src.commands.quiz_answer`
 - **Running the Rewards Server:** `python -m uvicorn src.server:app --host 127.0.0.1 --port 8000`
 - **Running ngrok tunnel (for Todoist webhooks):** `ngrok http --domain [STATIC DOMAIN] 8000`
+
+### Quiz Daemon
+
+RAG-powered study quiz system that prints question and answer receipts on a schedule.
+
+**Step 1 — Ingest your notes (run once per document set):**
+```bash
+# Feed your study notes — generates >=50 Q&A pairs automatically
+python -m src.commands.quiz_ingest /path/to/re_notes.pdf /path/to/game_hacking.txt
+
+# Clear and re-ingest
+python -m src.commands.quiz_ingest notes.pdf --reset
+
+# Check what's ingested and how many questions are in the pool
+python -m src.commands.quiz_ingest --list
+
+# Re-generate questions without re-ingesting (e.g. after switching LLM)
+python -m src.commands.quiz_ingest --regen-pool
+```
+
+**Step 2 — Run the quiz daemon:**
+```bash
+# Start the background daemon (default: quiz every 2 hours, answer after 5 min)
+python -m src.commands.quiz
+
+# Customize intervals
+python -m src.commands.quiz --interval 60 --answer-delay 10
+
+# One-shot quiz right now (for testing)
+python -m src.commands.quiz --once
+
+# No 30-min warning slip
+python -m src.commands.quiz --no-warning
+```
+
+**Manual answer trigger (any time before the scheduled answer):**
+```bash
+# Print the answer right now — daemon will skip its own answer slip
+python -m src.commands.quiz_answer
+
+# Review a specific past quiz answer
+python -m src.commands.quiz_answer --id 7
+
+# List recent quiz history in the terminal
+python -m src.commands.quiz_answer --history
+```
+
+The quiz pipeline: notes → chunk → embed (local `sentence-transformers`) → store in SQLite → LLM generates ≥50 Q&A pairs upfront → daemon pops from pool every interval. Configure via `.env`:
+```dotenv
+QUIZ_INTERVAL=120        # minutes between quizzes
+QUIZ_ANSWER_DELAY=5      # minutes before answer slip prints
+QUIZ_TOPIC=Reverse Engineering and Game Hacking
+QUIZ_POOL_MIN=50         # minimum questions generated on ingest
+```
+
+Requires `LLM_PROVIDER` and `LLM_API_KEY` (or Ollama) in `.env` for question generation.
+
+### Free Games Loot Drop
+
+Print a receipt of all currently free game giveaways across platforms, each with a scannable QR code to claim it:
+
+```bash
+# Print all free games across all platforms
+python -m src.commands.freegames
+
+# Filter to a specific platform
+python -m src.commands.freegames --platform steam
+python -m src.commands.freegames --platform epic-games-store
+python -m src.commands.freegames --platform ps5
+
+# Limit to the first N games
+python -m src.commands.freegames --max 5
+
+# Text-only (no QR codes, faster print)
+python -m src.commands.freegames --no-qr
+```
+
+Powered by the [GamerPower API](https://www.gamerpower.com/api) — no API key required. Fetches active game giveaways from Steam, Epic Games, GOG, PlayStation, Xbox, Nintendo Switch, itch.io, and more. Each game entry shows its title, expiry date (or "Permanent"), and a QR code linking directly to its claim page.
+
+**Supported `--platform` slugs:** `steam`, `epic-games-store`, `gog`, `ps4`, `ps5`, `xbox-one`, `xbox-series-xs`, `switch`, `android`, `ios`, `itch.io`, `drm-free`, `pc`
 
 ### Brain Dump
 
