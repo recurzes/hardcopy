@@ -3,8 +3,14 @@ import textwrap
 from datetime import datetime
 
 from src.config import MAX_WIDTH
-from src.db import log_task_complete, print_level_up_receipt, print_new_record_lines
+from src.db import (
+    get_random_quote,
+    log_task_complete,
+    print_level_up_receipt,
+    print_new_record_lines,
+)
 from src.printer import get_printer
+
 
 REWARDS = {
     "common": [
@@ -107,7 +113,7 @@ def print_reward(task_name):
 
     tier = get_reward_tier()
     reward_text = random.choice(REWARDS[tier])
-    flavor_text = random.choice(QUOTES)
+    flavor_text = get_random_quote()
     time_bonus = get_time_bonus()
     ascii_frame = random.choice(ASCII_FRAMES)
 
